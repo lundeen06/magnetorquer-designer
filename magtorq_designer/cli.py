@@ -9,6 +9,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
 from rich.layout import Layout
 from rich.text import Text
+from rich.align import Align
 from pathlib import Path
 import json
 import os
@@ -41,10 +42,16 @@ def print_banner():
 ██║ ╚═╝ ██║ ██║  ██║ ╚██████╔╝   ██║    ╚██████╔╝ ██║  ██║ ╚██████╔╝
 ╚═╝     ╚═╝ ╚═╝  ╚═╝  ╚═════╝    ╚═╝     ╚═════╝  ╚═╝  ╚═╝  ╚══▀▀═╝[/white] 
 
-[dim]Multi-physics magnetorquer design optimization tool for spacecraft attitude control.
-Originally developed for Stanford SSI's 2U CubeSat SAMWISE.[/dim]
-"""
-    console.print(banner)
+    Multi-physics magnetorquer design optimization tool for spacecraft attitude control
+    [dim]Originally developed for Stanford SSI's 2U CubeSat SAMWISE[/dim]
+    """
+    console.print(Panel(
+        Align.center(banner.strip()),
+        style="bold white",
+        padding=(1, 2),
+        border_style="white"
+    ))
+    console.print()
 
 
 def create_constraints_interactively() -> Dict[str, Any]:
@@ -221,6 +228,7 @@ def interactive():
                 "🎯 Design new magnetorquer",
                 "📁 Load existing constraints",
                 "📊 Analyze existing design", 
+                "🖼️ View design layers",
                 "🔧 Generate KiCad PCB",
                 "📈 View design plots",
                 "❌ Exit"
@@ -239,6 +247,9 @@ def interactive():
             
         elif choice == "📊 Analyze existing design":
             analyze_existing_design()
+            
+        elif choice == "🖼️ View design layers":
+            view_design_layers_interactive()
             
         elif choice == "🔧 Generate KiCad PCB":
             generate_pcb_files()
@@ -469,6 +480,42 @@ def generate_pcb_files():
         
     except Exception as e:
         console.print(f"\n❌ Error: {e}", style="bold red")
+
+
+def view_design_layers_interactive():
+    """View design layers in interactive Plotly viewer."""
+    if not os.path.exists("designs"):
+        console.print("❌ No designs directory found.", style="red")
+        return
+        
+    design_files = [f for f in os.listdir("designs") if f.endswith("-design.json")]
+    
+    if not design_files:
+        console.print("❌ No design files found in designs/ directory.", style="red")
+        return
+    
+    selected_file = questionary.select(
+        "Select design file to view interactively:",
+        choices=design_files
+    ).ask()
+    
+    if not selected_file:
+        return
+        
+    try:
+        with open(f"designs/{selected_file}", 'r') as f:
+            design_data = json.load(f)
+        
+        console.print(f"\n🖼️ Opening interactive layer viewer...", style="white")
+        
+        viz = VisualizationEngine()
+        output_path = viz.open_interactive_viewer(design_data, f"designs/{selected_file}")
+        
+        console.print(f"✅ Interactive viewer opened: {os.path.basename(output_path)}", style="white")
+        console.print("💡 Click legend items to show/hide layers!", style="cyan")
+        
+    except Exception as e:
+        console.print(f"\n❌ Error opening interactive viewer: {e}", style="bold red")
 
 
 def view_design_plots():

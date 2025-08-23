@@ -4,8 +4,11 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 import numpy as np
 import os
+import webbrowser
 from typing import Dict, Any, List, Tuple
 from pathlib import Path
+import plotly.graph_objects as go
+import plotly.io as pio
 
 
 class VisualizationEngine:
@@ -95,14 +98,15 @@ class VisualizationEngine:
         for turn in range(num_turns):
             offset = turn * turn_pitch
             
-            # Calculate current rectangle
+            # Calculate current rectangle dimensions
             current_outer_length = outer_length - 2 * offset  
             current_outer_width = outer_width - 2 * offset
-            current_inner_length = effective_inner_length + 2 * offset
-            current_inner_width = effective_inner_width + 2 * offset
             
-            # Ensure we don't go beyond inner boundaries
-            if current_outer_length <= current_inner_length or current_outer_width <= current_inner_width:
+            # Check if we've reached the inner boundaries (with proper clearance)
+            min_length = effective_inner_length + turn_pitch  # Extra margin
+            min_width = effective_inner_width + turn_pitch
+            
+            if current_outer_length <= min_length or current_outer_width <= min_width:
                 break
                 
             # Start position (bottom-left)
@@ -264,3 +268,268 @@ class VisualizationEngine:
         plt.close()
         
         return output_filename
+
+    def create_interactive_layer_viewer(self, design_data: Dict[str, Any], 
+                                      design_file: str | Path,
+                                      output_dir: str = "output") -> str:
+        """Create interactive Plotly visualization with toggleable layers."""
+        os.makedirs(output_dir, exist_ok=True)
+        base_filename = self.get_base_filename(design_file)
+        
+        params = {
+            'inner_length': design_data['dimensions']['inner']['length'],
+            'inner_width': design_data['dimensions']['inner']['width'],
+            'outer_length': design_data['dimensions']['outer']['length'],
+            'outer_width': design_data['dimensions']['outer']['width'],
+            'trace_width': design_data['traces']['width'],
+            'trace_spacing': design_data['traces']['spacing'],
+            'num_turns': design_data['traces']['turns_per_layer'],
+            'num_layers': design_data['traces']['total_layers']
+        }
+        
+        # Create figure
+        fig = go.Figure()
+        
+        # Generate viridis color scheme for layers
+        num_layers = params['num_layers'] - 1  # Exclude H-bridge layer
+        viridis_colors = plt.cm.viridis(np.linspace(0, 1, max(num_layers, 1)))
+        layer_colors = [f'rgb({int(r*255)}, {int(g*255)}, {int(b*255)})' 
+                       for r, g, b, _ in viridis_colors]
+        
+        # Add PCB outline traces
+        self._add_pcb_outline(fig, params)
+        
+        # Add coil layers
+        for layer_idx in range(params['num_layers'] - 1):  # Exclude H-bridge layer
+            color = layer_colors[layer_idx % len(layer_colors)]
+            self._add_coil_layer(fig, params, layer_idx, color, base_filename)
+        
+        # Add H-bridge connection layer
+        if params['num_layers'] > 0:
+            self._add_hbridge_layer(fig, params)
+        
+        # Update layout
+        fig.update_layout(
+            title=f"{base_filename.replace('-', ' ').title()} - Interactive Layer View",
+            xaxis_title="Width (mm)",
+            yaxis_title="Length (mm)",
+            template="plotly_white",
+            showlegend=True,
+            legend=dict(
+                x=1.02,
+                y=1,
+                xanchor="left",
+                yanchor="top"
+            ),
+            width=1200,
+            height=800,
+            xaxis=dict(
+                scaleanchor="y",
+                scaleratio=1,
+                showgrid=True,
+                gridcolor="lightgray"
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor="lightgray"
+            ),
+            hovermode='closest'
+        )
+        
+        # Add design information as annotation
+        info_text = self._get_design_info_text(design_data)
+        fig.add_annotation(
+            x=0.02,
+            y=0.98,
+            xref="paper",
+            yref="paper",
+            text=info_text,
+            showarrow=False,
+            font=dict(family="monospace", size=10),
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="gray",
+            borderwidth=1,
+            xanchor="left",
+            yanchor="top"
+        )
+        
+        # Save interactive HTML
+        output_filename = f"{base_filename}-interactive-layers.html"
+        output_path = os.path.join(output_dir, output_filename)
+        fig.write_html(output_path)
+        
+        return output_path
+
+    def _add_pcb_outline(self, fig: go.Figure, params: Dict[str, float]):
+        """Add PCB outline traces to the figure."""
+        # Outer board outline
+        outer_x = [-params['outer_width']/2, params['outer_width']/2, 
+                  params['outer_width']/2, -params['outer_width']/2, -params['outer_width']/2]
+        outer_y = [-params['outer_length']/2, -params['outer_length']/2,
+                  params['outer_length']/2, params['outer_length']/2, -params['outer_length']/2]
+        
+        fig.add_trace(go.Scatter(
+            x=outer_x, y=outer_y,
+            mode='lines',
+            name='PCB Outline',
+            line=dict(color='black', width=3),
+            showlegend=True,
+            hovertemplate="PCB Outer Boundary<extra></extra>"
+        ))
+        
+        # Inner cutout outline
+        inner_x = [-params['inner_width']/2, params['inner_width']/2,
+                  params['inner_width']/2, -params['inner_width']/2, -params['inner_width']/2]
+        inner_y = [-params['inner_length']/2, -params['inner_length']/2,
+                  params['inner_length']/2, params['inner_length']/2, -params['inner_length']/2]
+        
+        fig.add_trace(go.Scatter(
+            x=inner_x, y=inner_y,
+            mode='lines',
+            name='Inner Cutout',
+            line=dict(color='black', width=2, dash='dash'),
+            showlegend=True,
+            hovertemplate="Inner Cutout<extra></extra>"
+        ))
+
+    def _add_coil_layer(self, fig: go.Figure, params: Dict[str, float], 
+                       layer_idx: int, color: str, base_filename: str):
+        """Add a single coil layer to the figure with proper trace width visualization."""
+        paths = self.generate_spiral_coordinates(params, layer_idx)
+        
+        if not paths:
+            return
+        
+        trace_width_mm = params['trace_width']
+        layer_name = f'Layer {layer_idx + 1}'
+        
+        # Generate trace segments with proper width
+        for i in range(0, len(paths) - 1, 4):  # Process each rectangular turn
+            # Get the four corners of this turn
+            if i + 3 < len(paths):
+                turn_corners = paths[i:i+4]
+                
+                # Create filled rectangles for each segment of the turn
+                self._add_trace_segment(fig, turn_corners, trace_width_mm, color, 
+                                      layer_name, layer_idx == 0)
+                                      
+        # Note: base_filename used for context but not needed in this implementation
+
+    def _add_trace_segment(self, fig: go.Figure, corners: List[Tuple[float, float]], 
+                          trace_width_mm: float, color: str, layer_name: str, 
+                          show_legend: bool):
+        """Add a trace segment with proper width as filled rectangles."""
+        # Create trace segments for each side of the rectangular turn
+        sides = [
+            (corners[0], corners[1]),  # Bottom
+            (corners[1], corners[2]),  # Right  
+            (corners[2], corners[3]),  # Top
+            (corners[3], corners[0])   # Left
+        ]
+        
+        for i, (start, end) in enumerate(sides):
+            # Calculate perpendicular offset for trace width
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length = np.sqrt(dx*dx + dy*dy)
+            
+            if length > 0:
+                # Unit vector perpendicular to trace direction
+                perp_x = -dy / length * trace_width_mm / 2
+                perp_y = dx / length * trace_width_mm / 2
+                
+                # Create rectangle for this trace segment
+                rect_x = [
+                    start[0] + perp_x, start[0] - perp_x,
+                    end[0] - perp_x, end[0] + perp_x, start[0] + perp_x
+                ]
+                rect_y = [
+                    start[1] + perp_y, start[1] - perp_y,
+                    end[1] - perp_y, end[1] + perp_y, start[1] + perp_y
+                ]
+                
+                # Add filled rectangle
+                fig.add_trace(go.Scatter(
+                    x=rect_x,
+                    y=rect_y,
+                    mode='lines',
+                    fill='toself',
+                    fillcolor=color,
+                    line=dict(color=color, width=0.5),
+                    name=layer_name,
+                    showlegend=(show_legend and i == 0),  # Only show legend once per layer
+                    legendgroup=layer_name,
+                    hovertemplate=f"{layer_name}<br>Trace Width: {trace_width_mm:.3f}mm<extra></extra>"
+                ))
+
+    def _add_hbridge_layer(self, fig: go.Figure, params: Dict[str, float]):
+        """Add H-bridge connection layer to the figure."""
+        # H-bridge connector dimensions
+        connector_width = 5.0
+        connector_length = 8.0
+        pin_radius = 0.6
+        
+        conn_x = params['outer_width']/2 + 1
+        conn_y = 0
+        
+        # Add connector rectangle
+        connector_x = [conn_x, conn_x + connector_width, conn_x + connector_width, conn_x, conn_x]
+        connector_y = [conn_y - connector_length/2, conn_y - connector_length/2,
+                      conn_y + connector_length/2, conn_y + connector_length/2, conn_y - connector_length/2]
+        
+        fig.add_trace(go.Scatter(
+            x=connector_x,
+            y=connector_y,
+            mode='lines',
+            fill='toself',
+            fillcolor='rgba(211,211,211,0.6)',
+            line=dict(color='gray', width=2),
+            name='H-Bridge Connector',
+            showlegend=True,
+            hovertemplate="H-Bridge Connection Layer<extra></extra>"
+        ))
+        
+        # Add pins
+        pin_y_positions = [conn_y - 2, conn_y + 2]
+        pin_x = conn_x + connector_width/2
+        
+        for i, pin_y in enumerate(pin_y_positions):
+            # Create circle for pin
+            theta = np.linspace(0, 2*np.pi, 20)
+            pin_x_coords = pin_x + pin_radius * np.cos(theta)
+            pin_y_coords = pin_y + pin_radius * np.sin(theta)
+            
+            label = 'Input Pin' if i == 0 else 'Output Pin'
+            fig.add_trace(go.Scatter(
+                x=pin_x_coords,
+                y=pin_y_coords,
+                mode='lines',
+                fill='toself',
+                fillcolor='gold',
+                line=dict(color='goldenrod', width=1),
+                name=label,
+                showlegend=True,
+                hovertemplate=f"{label}<extra></extra>"
+            ))
+
+    def _get_design_info_text(self, design_data: Dict[str, Any]) -> str:
+        """Get condensed design information for annotation."""
+        info_lines = [
+            f"<b>Design Specifications</b>",
+            f"Magnetic Moment: {design_data['performance']['magnetic_moment']:.4f} A·m²",
+            f"Power: {design_data['electrical']['power']:.2f}W",
+            f"Current: {design_data['electrical']['current']:.3f}A", 
+            f"Temp Rise: {design_data['thermal']['space']['temperature_rise']:.1f}°C",
+            f"Layers: {design_data['traces']['total_layers']}",
+            f"Turns/Layer: {design_data['traces']['turns_per_layer']}",
+            f"Trace Width: {design_data['traces']['width']:.3f}mm",
+            f"Copper Weight: {design_data['traces']['copper_weight']:.0f}oz"
+        ]
+        return "<br>".join(info_lines)
+
+    def open_interactive_viewer(self, design_data: Dict[str, Any], 
+                              design_file: str | Path) -> str:
+        """Create and open interactive layer viewer in browser."""
+        output_path = self.create_interactive_layer_viewer(design_data, design_file)
+        webbrowser.open('file://' + os.path.abspath(output_path))
+        return output_path
