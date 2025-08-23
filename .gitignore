@@ -7,3 +7,8 @@ __pycache__/
 designs/
 constraints/
 build/
+output/
+plots/
+dist/
+*.html
+*.png
