@@ -1,4 +1,4 @@
-# Magnetorquer Designer - PCB-based magnetorquer optimization for spacecraft attitude control
+# Magnetorquer Designer - PCB-based magnetorquer optimization python script with KiCAD integration
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,11 +12,11 @@
 ╚═╝     ╚═╝ ╚═╝  ╚═╝  ╚═════╝    ╚═╝     ╚═════╝  ╚═╝  ╚═╝  ╚══▀▀═╝ 
 ```
 
-**Multi-physics magnetorquer design optimization tool for spacecraft attitude control systems. Originally developed for Stanford SSI's 2U CubeSat SAMWISE.**
+**Multi-physics PCB-based magnetorquer design optimization tool for spacecraft attitude control systems. Originally developed for Stanford SSI's 2U CubeSat SAMWISE.**
 
-## Design Challenge
+## The Motivation
 
-Spacecraft attitude control systems require magnetorquers that deliver maximum magnetic moment within strict power, thermal, and manufacturing constraints. Traditional design approaches rely on iterative prototyping and testing, resulting in suboptimal performance and extended development cycles.
+Satellite attitude control systems require magnetorquers that deliver maximum magnetic moment within strict power, thermal, and manufacturing constraints. Traditional design approaches rely on iterative prototyping and testing, resulting in suboptimal performance and extended development cycles.
 
 The fundamental challenge lies in the coupled nature of magnetorquer design parameters: trace geometry affects resistance, which determines current capacity, which impacts both magnetic moment and thermal dissipation. Optimizing these interdependent variables simultaneously requires sophisticated multi-physics modeling.
 
@@ -56,7 +56,7 @@ Successfully deployed on Stanford SSI's SAMWISE CubeSat and other spacecraft mis
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/magtorq-designer
+git clone https://github.com/lundeen06/magtorq-designer
 cd magtorq-designer
 pip install -e .
 ```

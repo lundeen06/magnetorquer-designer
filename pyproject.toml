@@ -9,7 +9,7 @@ description = "A comprehensive tool for designing and optimizing PCB-based magne
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
-    { name = "Your Name", email = "your.email@example.com" },
+    { name = "Lundeen Cahilly", email = "lundeen.cahilly@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -50,20 +50,20 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/magtorq-designer"
-Repository = "https://github.com/yourusername/magtorq-designer.git"
-Documentation = "https://github.com/yourusername/magtorq-designer#readme"
-"Bug Tracker" = "https://github.com/yourusername/magtorq-designer/issues"
+Homepage = "https://github.com/lundeen06/magtorq-designer"
+Repository = "https://github.com/lundeen06/magtorq-designer.git"
+Documentation = "https://github.com/lundeen06/magtorq-designer#readme"
+"Bug Tracker" = "https://github.com/lundeen06/magtorq-designer/issues"
 
 [project.scripts]
-magnetorquer-designer = "magtorq_designer.cli:main"
+magtorq = "magtorq.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["magtorq_designer"]
+packages = ["magtorq"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/magtorq_designer",
+    "/magtorq",
     "/README.md",
     "/LICENSE",
 ]
