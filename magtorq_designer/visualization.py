@@ -75,57 +75,85 @@ class VisualizationEngine:
         return "\n".join(info)
 
     def generate_spiral_coordinates(self, params: Dict[str, float], layer_idx: int) -> List[Tuple[float, float]]:
-        """Generate spiral coordinates for a magnetorquer layer."""
-        outer_width = params['outer_width']
-        outer_length = params['outer_length'] 
-        inner_width = params['inner_width']
+        """Generate coordinates for a realistic spiral with connections between turns."""
         inner_length = params['inner_length']
+        inner_width = params['inner_width']
+        outer_length = params['outer_length']
+        outer_width = params['outer_width']
         trace_width = params['trace_width']
         trace_spacing = params['trace_spacing']
         num_turns = params['num_turns']
         
-        # Calculate clearance
-        min_inner_clearance = trace_width + 2 * trace_spacing
-        effective_inner_length = inner_length + 2 * min_inner_clearance
-        effective_inner_width = inner_width + 2 * min_inner_clearance
-        
         paths = []
-        turn_pitch = trace_width + trace_spacing
+        turn_length = trace_spacing + trace_width
         
-        # Direction: 0=right, 1=up, 2=left, 3=down
-        direction = layer_idx % 2  # Alternate direction for different layers
-        
-        for turn in range(num_turns):
-            offset = turn * turn_pitch
+        # Start from outer edge
+        for n in range(num_turns):
+            # Calculate dimensions for this turn
+            y_track_length = outer_length - 2*n*(trace_spacing+trace_width)
+            x_track_length = outer_width - 2*n*(trace_spacing+trace_width)
             
-            # Calculate current rectangle dimensions
-            current_outer_length = outer_length - 2 * offset  
-            current_outer_width = outer_width - 2 * offset
+            # Calculate starting positions
+            x_start = -outer_width/2 + n*(trace_spacing+trace_width)
+            y_start = -outer_length/2 + n*(trace_spacing+trace_width)
+            x_end = x_start + x_track_length
+            y_end = y_start + y_track_length
+            y_2_end = y_end - trace_spacing - trace_width
+            x_2_end = x_start + trace_spacing + trace_width
             
-            # Check if we've reached the inner boundaries (with proper clearance)
-            min_length = effective_inner_length + turn_pitch  # Extra margin
-            min_width = effective_inner_width + turn_pitch
+            # First turn special handling
+            if n == 0:
+                if layer_idx == 0:
+                    # Input connection
+                    paths.extend([
+                        (x_start, y_end-turn_length),
+                        (x_start, y_end+1.5*turn_length)
+                    ])
+                else:
+                    # Connection to previous layer
+                    paths.extend([
+                        (x_start, y_end-turn_length),
+                        (x_start+turn_length, y_end),
+                        (x_start+2*(layer_idx+1)*turn_length+5, y_end),
+                        (x_start+2*(layer_idx+1)*turn_length+6.5*turn_length, y_end+1.5*turn_length)
+                    ])
             
-            if current_outer_length <= min_length or current_outer_width <= min_width:
-                break
-                
-            # Start position (bottom-left)
-            start_x = -current_outer_width/2
-            start_y = -current_outer_length/2
-            
-            # Create rectangular path
-            corners = [
-                (start_x, start_y),                           # Bottom-left
-                (start_x + current_outer_width, start_y),     # Bottom-right
-                (start_x + current_outer_width, start_y + current_outer_length), # Top-right
-                (start_x, start_y + current_outer_length),    # Top-left
-                (start_x, start_y),                           # Close the loop
-            ]
-            
-            if direction == 1:  # Reverse for odd layers
-                corners = corners[::-1]
-                
-            paths.extend(corners[:-1])  # Don't duplicate the closing point
+            # Main spiral segments
+            # Left vertical
+            paths.extend([
+                (x_start, y_start+turn_length),
+                (x_start, y_end-turn_length)
+            ])
+            # Top left corner  
+            paths.extend([
+                (x_start, y_start+turn_length),
+                (x_start+turn_length, y_start)
+            ])
+            # Top horizontal
+            paths.extend([
+                (x_start+turn_length, y_start),
+                (x_end-turn_length, y_start)
+            ])
+            # Top right corner
+            paths.extend([
+                (x_end-turn_length, y_start),
+                (x_end, y_start+turn_length)
+            ])
+            # Right vertical
+            paths.extend([
+                (x_end, y_start+turn_length),
+                (x_end, y_2_end)
+            ])
+            # Bottom right corner
+            paths.extend([
+                (x_end, y_2_end),
+                (x_end-turn_length, y_2_end)
+            ])
+            # Bottom horizontal (partial)
+            paths.extend([
+                (x_end-turn_length, y_2_end),
+                (x_2_end, y_2_end)
+            ])
             
         return paths
 
@@ -403,31 +431,11 @@ class VisualizationEngine:
         trace_width_mm = params['trace_width']
         layer_name = f'Layer {layer_idx + 1}'
         
-        # Generate trace segments with proper width
-        for i in range(0, len(paths) - 1, 4):  # Process each rectangular turn
-            # Get the four corners of this turn
-            if i + 3 < len(paths):
-                turn_corners = paths[i:i+4]
-                
-                # Create filled rectangles for each segment of the turn
-                self._add_trace_segment(fig, turn_corners, trace_width_mm, color, 
-                                      layer_name, layer_idx == 0)
-                                      
-        # Note: base_filename used for context but not needed in this implementation
-
-    def _add_trace_segment(self, fig: go.Figure, corners: List[Tuple[float, float]], 
-                          trace_width_mm: float, color: str, layer_name: str, 
-                          show_legend: bool):
-        """Add a trace segment with proper width as filled rectangles."""
-        # Create trace segments for each side of the rectangular turn
-        sides = [
-            (corners[0], corners[1]),  # Bottom
-            (corners[1], corners[2]),  # Right  
-            (corners[2], corners[3]),  # Top
-            (corners[3], corners[0])   # Left
-        ]
-        
-        for i, (start, end) in enumerate(sides):
+        # Create filled rectangles for each line segment to show actual trace width
+        for i in range(len(paths) - 1):
+            start = paths[i]
+            end = paths[i + 1]
+            
             # Calculate perpendicular offset for trace width
             dx = end[0] - start[0]
             dy = end[1] - start[1]
@@ -448,7 +456,7 @@ class VisualizationEngine:
                     end[1] - perp_y, end[1] + perp_y, start[1] + perp_y
                 ]
                 
-                # Add filled rectangle
+                # Add filled rectangle - only show legend for first segment
                 fig.add_trace(go.Scatter(
                     x=rect_x,
                     y=rect_y,
@@ -457,10 +465,13 @@ class VisualizationEngine:
                     fillcolor=color,
                     line=dict(color=color, width=0.5),
                     name=layer_name,
-                    showlegend=(show_legend and i == 0),  # Only show legend once per layer
-                    legendgroup=layer_name,
+                    showlegend=(i == 0),  # Only show legend for first segment
+                    legendgroup=layer_name,  # Group all segments under same layer
                     hovertemplate=f"{layer_name}<br>Trace Width: {trace_width_mm:.3f}mm<extra></extra>"
                 ))
+                                      
+        # Note: base_filename used for context but not needed in this implementation
+
 
     def _add_hbridge_layer(self, fig: go.Figure, params: Dict[str, float]):
         """Add H-bridge connection layer to the figure."""

@@ -12,3 +12,4 @@ plots/
 dist/
 *.html
 *.png
+*.json
