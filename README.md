@@ -1,6 +1,8 @@
 # Magnetorquer Designer
 
-A comprehensive tool for designing and optimizing PCB-based magnetorquer coils for spacecraft attitude control. This includes physical optimization, thermal analysis, and automated PCB trace generation.
+A comprehensive tool for designing and optimizing PCB-based magnetorquer coils for spacecraft attitude control. It combines physical optimization, thermal analysis, manufacturing constraints, and automated KiCad trace generation.
+
+Originally built to design the magnetorquers for Stanford SSI's [SAMWISE CubeSat](https://github.com/stanford-ssi/samwise-adcs-flight). The optimizer turns mission and board constraints into a trace geometry that is ready to inspect and transfer into a PCB layout.
 
 <img src="output/z-magnetorquer-layer_2.png" width="1000" alt="Example Magnetorquer Layer">
 <img src="plots/z-magnetorquer-design-analysis.png" width="1000" alt="Example Magnetorquer Analysis Plots">
